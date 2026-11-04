@@ -1,0 +1,37 @@
+# 로컬 개발용. 웹·앱 개발자는 `docker compose up --build`로 API와 DB를 함께 띄운다.
+# 백엔드 개발자는 `docker compose up db`로 DB만 띄우고 IDE에서 앱을 실행한다.
+# 가짜 데이터만 쓴다. 실제 학생 데이터를 넣지 않는다(L-09).
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-liaison}
+      POSTGRES_USER: ${POSTGRES_USER:-liaison}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-liaison}
+      TZ: UTC
+    ports:
+      # 이 PC에서만 접속(같은 와이파이의 다른 기기에 열지 않음). 5432를 이미 쓰고 있으면 .env에서 DB_PORT를 바꾼다.
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-liaison}
+      DB_USERNAME: ${POSTGRES_USER:-liaison}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-liaison}
+    ports:
+      - "${API_PORT:-8080}:8080"
+
+volumes:
+  db-data:
