@@ -26,3 +26,6 @@ jobs:
           java-version: '25'
 
       - uses: gradle/actions/dependency-submission@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          # 상용 비공개 캐시(enhanced) 대신 공개 소스(MIT) 캐시를 쓴다. 외부 서비스·비공개 코드를 CI에 들이지 않기 위해서다.
+          cache-provider: basic
