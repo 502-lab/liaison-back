@@ -1,0 +1,38 @@
+name: Dependency Review
+
+# PR에서 새로 들어오거나 바뀌는 의존성을 보여 주고, 알려진 취약점(높음 이상)이 있으면 실패한다.
+# Gradle은 PR 쪽 의존성 목록을 먼저 제출해야 main과 비교할 수 있다.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    # Dependabot PR과 포크 PR은 토큰이 읽기 전용이라 의존성 목록을 제출할 수 없어 건너뛴다.
+    # Dependabot PR은 대기 기간(cooldown)과 월간 묶음으로 따로 관리한다.
+    if: github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # PR 쪽 의존성 목록 제출에 필요
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/dependency-submission@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never
+          retry-on-snapshot-warnings: true

@@ -20,14 +20,14 @@ jobs:
       - uses: actions/checkout@v7
 
       # gradle-wrapper.jar가 Gradle 공식 배포본과 같은지 확인한다.
-      - uses: gradle/actions/wrapper-validation@v6
+      - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
 
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       # spotlessCheck(형식) + 테스트(Testcontainers PostgreSQL 17) + bootJar
       - name: Build
