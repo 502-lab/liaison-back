@@ -7,7 +7,7 @@ AI 도구(Claude Code, Cursor, Copilot, Codex 등)와 사람 모두 작업 전�
 
 - `docs/common/AI_RULES.md` — 절대 하지 않는 것, 반드시 하는 것
 - `docs/common/GLOSSARY.md` — 표준어와 코드 이름
-- `docs/common/CODE_CONVENTIONS.md` — 이름·API·시간·로그·테스트 규칙
+- `docs/common/CODE_CONVENTIONS.md` — 모든 파트 공통 이름·API·시간·로그·테스트 원칙
 - `docs/common/GIT_CONVENTIONS.md` — 커밋·브랜치·PR 규칙
 - `docs/common/DOMAIN.md` — 도메인 모델 요약
 - `docs/common/PRIVACY_RULES.md` — 개인정보 규칙
@@ -17,6 +17,7 @@ AI 도구(Claude Code, Cursor, Copilot, Codex 등)와 사람 모두 작업 전�
 ## 2. 이 저장소
 - **역할:** Liaison 백엔드 API(학생 앱·선생님 앱·관리자 웹이 함께 씀)
 - **스택:** Spring Boot 4 · Java 25 · PostgreSQL 17 · Flyway · JPA · Gradle
+- **백엔드 규칙:** `docs/BACKEND.md`(Java 이름, 패키지 구조, 오류 응답, 학원 격리, Flyway, 보안 핵심 경로, 출시 버전 게이트, 테스트, 실행 방법). 백엔드 코드 소유자가 고칩니다.
 - **실행·빌드:** README 참고(`docker compose up --build`, `./gradlew build`)
 - **스키마:** Flyway 마이그레이션으로만 바꿉니다. 스키마·API 변경은 개발 총괄 검증을 거칩니다.
 - **커밋 전 비밀키 검사:** `git config core.hooksPath .githooks` (gitleaks 필요: `brew install gitleaks`). CI(Secret Scan)도 검사합니다.
