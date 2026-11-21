@@ -1,3 +1,15 @@
+// Gradle 플러그인(빌드 도구)이 끌어오는 라이브러리의 버전을 고친 버전 이상으로 맞춘다.
+// 애플리케이션 실행 코드에는 들어가지 않는 빌드 도구 클래스패스 전용 설정이다.
+buildscript {
+    dependencies {
+        constraints {
+            classpath('org.apache.commons:commons-lang3:3.18.0') {
+                because '빌드 도구 의존성의 알려진 문제가 고쳐진 버전'
+            }
+        }
+    }
+}
+
 plugins {
     id 'java'
     id 'org.springframework.boot' version '4.1.2'
