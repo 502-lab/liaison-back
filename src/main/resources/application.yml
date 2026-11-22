@@ -42,15 +42,4 @@ management:
     health:
       show-details: never
 
-logging:
-  level:
-    root: INFO
-    # SQL 바인딩 값(학생 이름 등)이 로그에 남지 않도록 org.hibernate.orm.jdbc.bind는 켜지 않는다.
----
-spring:
-  config:
-    activate:
-      on-profile: local
-logging:
-  level:
-    com.liaison: DEBUG
+# 로그 설정은 logback-spring.xml에만 둔다(보안 핵심 경로). 이 파일에 logging.* 키를 두지 않는다.
