@@ -43,10 +43,10 @@ docs/erd/draw.sh design consent        # 영역 하나만: consent.dbml의 표 +
 docs/erd/draw.sh design v1.0           # 버전 하나만: v1.0 표 + 그 표가 가리키는 다른 표(v1이면 v1.x 전부)
 docs/erd/draw.sh design consent --ko   # 그림 위 이름에 한글 이름·버전을 붙임. 영역·버전과 함께 써도 됨
 docs/erd/draw.sh actual                # 실제 그림(Flyway를 적용한 로컬 DB). 먼저 docker compose up --build -d
-python3 -m http.server --directory docs/erd/build/design-consent-ko 8000
+python3 -m http.server --bind 127.0.0.1 --directory docs/erd/build/design-consent-ko 8000
 ```
 
-- 필요한 것: Docker, Node.js(`npx`), python3. 파일을 바로 열면 그려지지 않으니 위처럼 띄워서 엽니다.
+- 필요한 것: Docker, Node.js(`npx`), python3. 파일을 바로 열면 그려지지 않으니 위처럼 띄워서 엽니다. `--bind 127.0.0.1`은 같은 와이파이의 다른 기기에서 그림을 열지 못하게 합니다.
 - **읽기 쉽게 보기:** 표가 많으면 한 장에 다 넣을 때 글자가 너무 작아집니다. 영역 하나씩 그리고, 주소에 `?showMode=KEY_ONLY`를 붙여 키 칸만 보면 읽기 쉽습니다(예: `http://localhost:8000/?showMode=KEY_ONLY`). 표를 누르면 오른쪽에 칸 설명이 나옵니다.
 - 표 이름 앞의 `public.`은 떼고 그립니다.
 - **한글 이름(`--ko`):** Liam은 note를 오른쪽 패널에만 보여 줍니다. `--ko`를 주면 그림 위 이름을 표는 `[v1.0·가칭] 위탁 문서 동의 · organization_agreements`, 칸은 `문서 종류 · document_kind`처럼 바꿉니다. 표보다 나중 버전에 더하는 칸은 `[v1.3부터] 무효 표시 시각 · invalidated_at`처럼 보입니다. 이름은 note 첫 마디에서 뽑으므로 4장의 note 규칙을 지켜야 제대로 나옵니다.

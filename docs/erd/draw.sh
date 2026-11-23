@@ -72,9 +72,15 @@ else
     echo "먼저 docker compose up --build -d 로 앱과 DB를 띄우세요(앱이 뜨면서 Flyway를 적용합니다)." >&2
     exit 1
   fi
-  user="$(docker exec "$cid" printenv POSTGRES_USER)"
-  db="$(docker exec "$cid" printenv POSTGRES_DB)"
-  pw="$(docker exec "$cid" printenv POSTGRES_PASSWORD | python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe=""))')"
+  # printenv가 붙인 마지막 줄바꿈 하나만 떼고, 값의 공백·특수 문자는 그대로 둔 채 주소용으로 인코딩한다.
+  env_enc() {
+    docker exec "$cid" printenv "$1" | python3 -I -c 'import sys, urllib.parse
+v = sys.stdin.read()
+print(urllib.parse.quote(v[:-1] if v.endswith("\n") else v, safe=""))'
+  }
+  user="$(env_enc POSTGRES_USER)"
+  db="$(env_enc POSTGRES_DB)"
+  pw="$(env_enc POSTGRES_PASSWORD)"
   tbls_json "$cid" "postgres://$user:$pw@localhost:5432/$db?sslmode=disable"
 fi
 
@@ -85,7 +91,9 @@ import json, re, sys
 
 src, dst, area_file, ver, ko = sys.argv[1:6]
 schema = json.load(open(src, encoding="utf-8"))
-tables, relations = schema["tables"], schema.get("relations", [])
+# 표가 하나도 없는 DB(마이그레이션 전)면 tbls가 목록 대신 null을 준다.
+schema["tables"], schema["relations"] = schema.get("tables") or [], schema.get("relations") or []
+tables, relations = schema["tables"], schema["relations"]
 
 
 def bare(name):
@@ -179,4 +187,4 @@ PY
 
 rm -rf "${build:?}/$out"
 npx -y "$LIAM_CLI" erd build --format tbls --input "$build/$out.json" --output-dir "$build/$out"
-echo "보기: python3 -m http.server --directory $build/$out 8000 그리고 브라우저에서 http://localhost:8000/?showMode=KEY_ONLY (키 칸만)"
+echo "보기: python3 -m http.server --bind 127.0.0.1 --directory $build/$out 8000 그리고 브라우저에서 http://localhost:8000/?showMode=KEY_ONLY (키 칸만)"

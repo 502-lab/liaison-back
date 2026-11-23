@@ -88,5 +88,7 @@ Table message_settings {
 }
 
 Ref: messages.(organization_id, thread_id) > message_threads.(organization_id, id)
+// DBML은 SET NULL에 칸을 고를 수 없어 아래처럼 적었지만, 실제 DDL은 ON DELETE SET NULL (message_id)입니다(PostgreSQL 15부터).
+// 칸을 고르지 않으면 organization_id까지 비우려다 NOT NULL에 걸려 메시지 삭제가 실패합니다.
 Ref: message_reports.(organization_id, message_id) > messages.(organization_id, id) [delete: set null]
 Ref: message_blocks.(organization_id, thread_id) > message_threads.(organization_id, id) [delete: cascade]
