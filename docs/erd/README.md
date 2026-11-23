@@ -7,12 +7,12 @@ v1~v3에 쓸 DB 표의 설계 전체입니다. 설계하는 동안은 이 폴더
 - **DBML은 설계 목표, Flyway는 지금 DB입니다.** 설계 목표는 v1~v3 전체이고, 지금 DB는 `src/main/resources/db/migration/`에 쌓인 마이그레이션입니다.
 - **설계와 다르게 만들 때만 DBML을 고칩니다.** 설계대로 만든 마이그레이션 PR은 DBML을 고치지 않아도 됩니다. 설계와 다르게 만들면 같은 PR에서 DBML도 고칩니다(PR 템플릿 체크 항목).
 - **둘이 어긋나면 Flyway가 맞습니다.** 어긋난 것을 찾으면 DBML을 Flyway에 맞춰 고칩니다.
-- **v1.0을 마칠 때 한 번 대조합니다.** 실제 그림(아래 3-2)과 설계 그림(3-1)을 나란히 봅니다.
+- **v1.0을 마칠 때 한 번 대조합니다.** 실제 그림과 설계 그림(3장)을 나란히 봅니다.
 - 표를 새로 설계하거나 바꾸는 결정은 개발 총괄의 검증을 거칩니다. 데이터를 새로 모으거나 보관 기간이 바뀌면 법무 확인도 필요합니다(AI_RULES 2-2).
 
 ## 2. 파일
 
-영역마다 파일 하나입니다. `Project` 블록은 `project.dbml`에만 둡니다. 관계(`Ref`)는 참조하는 쪽(자식 표)의 파일에 둡니다. 다른 파일의 표를 가리켜도 되므로, 변환할 때는 파일을 모두 합칩니다(3-1).
+영역마다 파일 하나입니다. `Project` 블록은 `project.dbml`에만 둡니다. 관계(`Ref`)는 참조하는 쪽(자식 표)의 파일에 둡니다. 다른 파일의 표를 가리켜도 되므로, 변환할 때는 파일을 모두 합칩니다(`draw.sh`가 합침).
 
 | 파일 | 영역 | 표 |
 |---|---|---|
@@ -35,40 +35,27 @@ v1~v3에 쓸 DB 표의 설계 전체입니다. 설계하는 동안은 이 폴더
 
 ## 3. 그림 보기
 
-각자 PC에서만 만들어 봅니다. 결과물은 `docs/erd/build/`에 두고 커밋하지 않습니다(`.gitignore`). 그림을 외부에 올리거나 게시하지 않고, Liam의 호스팅·GitHub 앱은 쓰지 않습니다(외부 서비스).
-
-도구는 Node.js의 `npx`로 그때그때 받아 씁니다. 저장소 의존성으로 넣지 않습니다. 버전은 아래처럼 고정하고, 올릴 때는 나온 지 7일이 지난 버전으로 이 문서를 고칩니다(AI_RULES 3-8).
-
-- `@dbml/cli` 12.0.0 (배포: Holistics, DBML 공식)
-- `@liam-hq/cli` 0.7.24 (배포: Liam)
-
-Liam은 DBML을 바로 읽지 못합니다. 그래서 설계 그림은 DBML을 PostgreSQL SQL로 바꾼 뒤 그립니다.
-
-### 3-1. 설계 그림 (DBML)
-
-저장소 맨 위 폴더에서 실행합니다.
+각자 PC에서 `docs/erd/draw.sh`로 만듭니다. 결과물은 `docs/erd/build/`에 두고 커밋하지 않습니다(`.gitignore`). 그림을 외부에 올리거나 게시하지 않고, Liam의 호스팅·GitHub 앱은 쓰지 않습니다(외부 서비스).
 
 ```bash
-mkdir -p docs/erd/build
-cat docs/erd/*.dbml > docs/erd/build/design.dbml
-npx -y -p @dbml/cli@12.0.0 dbml2sql --postgres -o docs/erd/build/design.sql docs/erd/build/design.dbml
-npx -y @liam-hq/cli@0.7.24 erd build --format postgres --input docs/erd/build/design.sql --output-dir docs/erd/build/design
-python3 -m http.server --directory docs/erd/build/design 8000
+docs/erd/draw.sh design   # 설계 그림(DBML)
+docs/erd/draw.sh actual   # 실제 그림(Flyway를 적용한 로컬 DB). 먼저 docker compose up --build -d
+python3 -m http.server --directory docs/erd/build/design 8000   # 브라우저에서 http://localhost:8000
 ```
 
-브라우저에서 `http://localhost:8000`을 엽니다(파일을 바로 열면 그려지지 않음). 파일을 하나씩 따로 변환하면 다른 파일을 가리키는 `Ref`에서 실패하므로 꼭 합쳐서 변환합니다.
+- 필요한 것: Docker, Node.js(`npx`), python3. 파일을 바로 열면 그려지지 않으니 위처럼 띄워서 엽니다.
+- **설계 그림:** DBML 파일을 모두 합쳐 PostgreSQL SQL로 바꾸고(파일마다 따로 바꾸면 다른 파일을 가리키는 `Ref`에서 실패), 포트를 열지 않는 임시 PostgreSQL에 넣은 뒤 그립니다. 설계 SQL이 실제 PostgreSQL에 들어가는지도 이때 확인됩니다. 임시 DB는 끝나면 지워집니다.
+- **실제 그림:** docker compose의 `db`에서 읽습니다. 로컬 DB에는 가짜 데이터만 두고, 스키마만 읽습니다.
+- **왜 tbls를 거치나:** Liam은 DBML을 읽지 못하고, SQL을 바로 읽으면 큰 파일에서 표·칸 설명과 인덱스를 빠뜨립니다. 그래서 DB 카탈로그를 tbls로 JSON으로 뽑아 Liam에 줍니다.
 
-### 3-2. 실제 그림 (Flyway를 적용한 로컬 DB)
+도구는 그때그때 받아 씁니다. 저장소 의존성으로 넣지 않습니다. 버전은 `draw.sh` 맨 위에 고정해 두었고, 올릴 때는 나온 지 7일이 지난 버전으로 바꿉니다(AI_RULES 3-8).
 
-```bash
-docker compose up --build -d        # 앱이 뜨면서 Flyway를 적용합니다
-mkdir -p docs/erd/build
-docker compose exec db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --schema-only --no-owner --no-privileges' > docs/erd/build/actual.sql
-npx -y @liam-hq/cli@0.7.24 erd build --format postgres --input docs/erd/build/actual.sql --output-dir docs/erd/build/actual
-python3 -m http.server --directory docs/erd/build/actual 8001
-```
-
-로컬 DB에는 가짜 데이터만 둡니다. `--schema-only`라 데이터는 나오지 않습니다.
+| 도구 | 하는 일 | 배포 | 버전 |
+|---|---|---|---|
+| `@dbml/cli` (npx) | DBML → PostgreSQL SQL | Holistics(DBML 공식) | 12.0.0 |
+| `ghcr.io/k1low/tbls` (Docker) | DB 카탈로그 → JSON | k1LoW(MIT) | v1.96.1, 이미지 digest 고정 |
+| `@liam-hq/cli` (npx) | JSON → ERD 그림 | Liam | 0.7.24 |
+| `postgres:17-alpine` (Docker) | 설계 그림용 임시 DB | PostgreSQL 공식 이미지 | 17 |
 
 ## 4. 쓰는 법
 
