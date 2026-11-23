@@ -1,0 +1,94 @@
+// 영역: 위탁·해지 — 위탁 문서 동의, 재수탁자 변경과 응답·재안내, 학원 해지 기록
+
+Table organization_agreements {
+  id uuid [pk, note: '서버에서 UUID v7']
+  consent_document_id uuid [not null, note: '위탁 문서 버전(PROCESSING_AGREEMENT). → `consent_documents.id`']
+  method varchar(20) [not null, note: '방식. ELECTRONIC(웹, v1.3) / WRITTEN(서면)']
+  response varchar(20) [not null, default: 'AGREED', note: '응답. AGREED / DECLINED. DECLINED는 범위 밖 변경 서면 응답에만']
+  subprocessor_change_id uuid [note: '범위 밖 재수탁자 변경 건. v1.3 · NULL 허용. → `subprocessor_changes.id`']
+  organization_id uuid [not null, note: '학원. 값만 저장(FK 없음). 학원을 파기해도 5년 남음']
+  agreed_by_user_id uuid [note: '웹으로 동의한 원장 계정. 값만 저장(FK 없음)']
+  document_hash varchar(64) [note: '문서 전문 해시. 웹 동의만']
+  agreed_at timestamptz [not null, note: '동의 시각. 웹 = 누른 시각, 서면 = 운영자가 기록한 시각']
+  signed_date date [note: '서면 서명일']
+  signer_name varchar(50) [note: '서면에 서명한 원장 이름']
+  signature_kind varchar(30) [note: '서명 방식. 서명한 PDF / 전자서명 등 (가칭)']
+  signer_verification varchar(30) [note: '원장 본인 확인 방법(서면). 가칭']
+  signed_copy_ref varchar(255) [note: '서명본 보관 위치를 가리키는 내부 값. 경로·주소 원문은 공개 문서에 적지 않음']
+  recorded_by_user_id uuid [note: '서면을 기록한 운영자. 값만 저장(FK 없음)']
+  delete_after timestamptz [note: '지울 시각. NULL = 학원이 아직 있음. 학원 파기 작업이 같은 트랜잭션에서 그 학원 행들에 파기 시각 + 5년(interval 5 years)을 채움(작업 역할만). 제출 사진 delete_after와 같은 뜻(개발 총괄 11/22)']
+  created_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (organization_id, agreed_at)
+    delete_after
+  }
+  Note: '위탁 문서 동의(학원 단위). 서면 v1.0부터, 웹 v1.3 · v1.0 · 가칭. 쌓기만 함. 서면 기록이 있는 학원은 웹 동의 화면을 띄우지 않음. 서명자 이름·서명본을 포함한 행 전체를 학원 데이터 파기일(해지 요청일 + 30일)부터 5년 보관한 뒤 삭제(법무 11/21, 12/2 묶음에서 다시 확인). 그래서 학원 파기 대상에서 빼고 학원·계정 FK를 두지 않음. 삭제 작업(deletion_runs job_type LOG_EXPIRY)이 delete_after < now()인 행을 지움. RLS를 걸고 요청 경로 역할은 SELECT·INSERT(웹 동의 v1.3), 고치기·지우기 없음. delete_after는 작업 역할만 채움(개발 총괄 11/21)'
+}
+
+Table subprocessor_changes {
+  id uuid [pk, note: '서버에서 UUID v7']
+  scope varchar(20) [not null, note: '범위. IN_SCOPE / OUT_OF_SCOPE (가칭). 판정은 법무']
+  vendor_before varchar(100) [note: '지금 업체']
+  vendor_after varchar(100) [not null, note: '바뀐 뒤 업체']
+  task_before varchar(200) [note: '지금 업무']
+  task_after varchar(200) [not null, note: '바뀐 뒤 업무']
+  location_before varchar(100) [note: '지금 위치']
+  location_after varchar(100) [not null, note: '바뀐 뒤 위치']
+  scope_change_note text [note: '항목·목적 변경 내용. 범위 밖만']
+  notified_at timestamptz [not null, note: '통지 시각. 범위 안은 적용 45일 전']
+  effective_date date [not null, note: '적용일. 미루면 이 값을 바꿈']
+  created_by_user_id uuid [not null, note: '등록한 운영자. → [외부] `users.id` 참조 예정(단일 FK)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Note: '재수탁자 변경 건(운영자 등록) · v1.3 · 가칭. 전역(운영자 전용)'
+}
+
+Table subprocessor_change_responses {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  subprocessor_change_id uuid [not null, note: '변경 건. → `subprocessor_changes.id`']
+  response varchar(20) [not null, note: '응답. CONFIRMED / REJECTED. 미응답은 행 없음']
+  responded_at timestamptz [not null, note: '응답 시각. REJECTED는 통지 기간에 학원 해지 요청이 접수된 시각']
+  organization_termination_id uuid [note: '거부로 기록된 해지 요청. → `organization_terminations.id` (복합 FK)']
+  withdrawn_at timestamptz [note: '거부 철회 시각. 해지를 철회하면 거부도 철회']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (organization_id, subprocessor_change_id) [unique]
+  }
+  Note: '재수탁자 변경에 대한 학원별 응답 · v1.3 · 가칭'
+}
+
+Table subprocessor_change_reminders {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  subprocessor_change_id uuid [not null, note: '변경 건. → `subprocessor_changes.id`']
+  days_before int [not null, note: '적용 며칠 전. 30 / 14 / 7 / 1']
+  channel varchar(10) [not null, note: '수단. EMAIL / PHONE']
+  reminded_at timestamptz [not null, note: '안내 시각']
+  recorded_by_user_id uuid [not null, note: '기록한 운영자. → [외부] `users.id` 참조 예정(단일 FK)']
+  created_at timestamptz [not null, default: `now()`]
+  Note: '범위 밖 변경의 재안내 기록(운영자 입력) · v1.3 · 가칭'
+}
+
+Table organization_terminations {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원. 값만 저장(FK 없음). 학원을 파기해도 남음']
+  reason varchar(30) [not null, note: '해지 사유. DIRECTOR_REQUEST / LOCK_EXPIRED(잠긴 지 90일) / PILOT_NOT_CONTINUED / OPERATOR (가칭)']
+  requested_at timestamptz [not null, note: '요청 시각. 내려받기 30일·백업 파기 37일은 이 값에서 계산']
+  requested_by uuid [note: '요청한 원장 소속. 값만 저장(FK 없음). 원장 웹 요청(v1.3)']
+  entered_by_user_id uuid [note: '입력한 운영자. 값만 저장(FK 없음). 운영자가 관리 스크립트로 넣은 해지(v1.0부터)']
+  withdrawn_at timestamptz [note: '철회 시각. 요청일부터 30일 안']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (organization_id, id) [unique]
+  }
+  Note: '학원 해지 요청(학원 파기 뒤에도 남는 기록). 관리 스크립트 v1.0부터, 원장 웹 요청 v1.3 · v1.0 · 가칭. 기록 테이블: FK 없음, ID·코드·시각만. ’요청일부터 37일 안 파기’의 근거라 학원 파기에서 뺌. 진행 중 테이블이라 RLS를 걸고 요청 경로 역할은 SELECT·INSERT·UPDATE(INSERT는 v1.3 원장 웹 요청), 지우기는 예약 작업 역할만(개발 총괄 11/22). v1.0에서 당긴 이유: 종료 처리는 v1.0부터 관리 스크립트로 하고, 위탁 동의의 delete_after가 이 표의 요청 시각에 기댐(개발 총괄 11/22). 요청 시각부터 3년 보관(법무 11/21). 파기 실행은 deletion_runs'
+}
+
+Ref: organization_agreements.consent_document_id > consent_documents.id
+Ref: organization_agreements.subprocessor_change_id > subprocessor_changes.id
+Ref: subprocessor_change_responses.subprocessor_change_id > subprocessor_changes.id
+Ref: subprocessor_change_responses.(organization_id, organization_termination_id) > organization_terminations.(organization_id, id)
+Ref: subprocessor_change_reminders.subprocessor_change_id > subprocessor_changes.id

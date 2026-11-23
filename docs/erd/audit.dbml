@@ -1,0 +1,68 @@
+// 영역: 기록 — 접근 기록, 권한 변경 기록, 열람·정정·삭제 요청 기록
+
+Table access_logs {
+  id uuid [pk, note: '서버에서 UUID v7']
+  actor_type varchar(20) [not null, note: '행위자 종류. USER / OPERATOR / ACADEMY_DEVICE(v2.3) / SYSTEM']
+  actor_user_id uuid [note: '행위자 계정. 값만 저장(FK 없음)']
+  actor_membership_id uuid [note: '행위자 소속. 값만 저장(FK 없음). 원장·선생님이 학원 안에서 볼 때']
+  actor_device_id uuid [note: '학원 기기. 값만 저장(FK 없음). v2.3 · NULL 허용. 출결 쓰기']
+  organization_id uuid [note: '학원. 값만 저장(FK 없음). 학원 밖 운영자 처리면 NULL']
+  action varchar(20) [not null, note: '행위. VIEW / CREATE / UPDATE / DELETE / EXPORT / DOWNLOAD (가칭)']
+  target_type varchar(40) [not null, note: '대상 종류. 예: MEMBERSHIP / HOMEWORK / SUBMISSION_PHOTO / PERFORMANCE_RECORD / EXAM_SCORE / TEACHER_MEMO / COUNSELING_NOTE / STUDENT_EXPORT / REPORT (가칭)']
+  target_id uuid [note: '대상 ID. 값만 저장(FK 없음)']
+  subject_membership_id uuid [note: '누구의 정보인지(학생 소속). 값만 저장(FK 없음). 유출 영향 범위·처리 현황 확인서용']
+  item_count int [note: '건수. 목록·내보내기']
+  reason_code varchar(40) [note: '사유 코드. 대량 내보내기 등']
+  created_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (organization_id, created_at)
+    (subject_membership_id, created_at)
+    (actor_user_id, created_at)
+  }
+  Note: '개인정보 접근 기록(누가·언제·무엇을) · v1.0 · AccessLog. 쌓기만 함(요청 경로 역할은 INSERT만). 이름·입력값 없음. 1년 이상 보관, 매일 감사 저장소로 복사(잠금 1년). 보관 기간이 지난 행 삭제·파티션은 1.0.24b. PDF 리포트 내려받기(v2.2)도 여기 남김'
+}
+
+Table permission_change_logs {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [note: '학원. 값만 저장(FK 없음)']
+  actor_type varchar(20) [not null, note: '행위자 종류. USER / OPERATOR / SYSTEM']
+  actor_user_id uuid [note: '행위자 계정. 값만 저장(FK 없음)']
+  actor_membership_id uuid [note: '행위자 소속. 값만 저장(FK 없음)']
+  change_code varchar(60) [not null, note: '변경 코드. 예: ROLE_ADDED / ROLE_REMOVED / ASSIGNMENT_ADDED / ASSIGNMENT_REMOVED / RESPONSIBILITY_TRANSFERRED / MEMBERSHIP_APPROVED / MEMBERSHIP_SUSPENDED / MEMBERSHIP_UNSUSPENDED / AUTH_APPROVAL_APPROVED / AUTH_APPROVAL_REJECTED / ORGANIZATION_CREATED / ORGANIZATION_REGISTRATION_VERIFIED / DIRECTOR_INVITATION_ISSUED. 사건 하나에 코드 하나']
+  target_membership_id uuid [note: '대상 소속. 값만 저장(FK 없음)']
+  target_user_id uuid [note: '대상 계정. 값만 저장(FK 없음)']
+  related_membership_id uuid [note: '관련 소속. 값만 저장(FK 없음). 넘겨받은 담당 등']
+  subject varchar(20) [note: '과목. 담당 배정·넘기기의 Subject']
+  verification_method varchar(20) [note: '본인 확인 방법. 승인일 때 VerificationMethod']
+  old_value varchar(50) [note: '변경 전 값. 코드·날짜만(예: 역할, 요금제, 구독 끝나는 날)']
+  new_value varchar(50) [note: '변경 뒤 값. 코드·날짜만']
+  reason_code varchar(40) [note: '사유 코드']
+  created_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (organization_id, created_at)
+    (target_membership_id, created_at)
+  }
+  Note: '권한 변경·승인 기록 · v1.0 · PermissionChangeLog. 쌓기만 함. ID·코드만. 3년 보관, 매일 감사 저장소로 복사(잠금 3년)'
+}
+
+Table privacy_requests {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [note: '학원. 값만 저장(FK 없음). 소속 없는 계정·원장 계정 삭제 요청은 NULL']
+  request_type varchar(30) [not null, note: '요청 종류. ACCESS / CORRECTION / DELETION / ACCOUNT_DELETION (가칭)']
+  correction_item varchar(30) [note: '정정할 항목. v1.1 · NULL 허용. NAME / GRADE / BIRTH_DATE / SCHOOL_NAME / HOMEWORK / PERFORMANCE_RECORD / OTHER (가칭). 고른 항목 코드만 넣고 자유 입력·고치기 전후 값은 넣지 않음(법무 11/21)']
+  requested_by_membership_id uuid [note: '요청자 소속. 값만 저장(FK 없음)']
+  requested_by_user_id uuid [note: '요청자 계정. 값만 저장(FK 없음)']
+  status varchar(20) [not null, note: '처리 상태. PENDING / COMPLETED / REJECTED / CANCELED (가칭)']
+  reject_reason_code varchar(40) [note: '거절 사유 코드. 칸 이름 가칭. 값 목록은 설계 때(7장)']
+  requested_at timestamptz [not null, note: '접수 시각. 처리 기한 = +10일(계산)']
+  handled_at timestamptz [note: '처리 시각. COMPLETED·REJECTED는 처리한 시각, CANCELED는 취소를 기록한 시각. 3년은 이 값부터 셈. CHECK ck_privacy_requests_handled_at: (status = PENDING) = (handled_at IS NULL)']
+  handled_by_membership_id uuid [note: '처리한 원장. 값만 저장(FK 없음)']
+  handled_by_user_id uuid [note: '처리한 운영자. 값만 저장(FK 없음)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (organization_id, status, requested_at)
+    (requested_by_user_id, requested_at)
+  }
+  Note: '열람·정정·삭제 요청 기록(원장 계정 삭제 요청 포함) · v1.0 · 가칭. AccountDeletionRequest를 합침(개발 확정, 3.3.11 요청함이 한 목록). CHECK: ACCOUNT_DELETION이면 REJECTED 없음(계정 삭제는 막지 않음). 이름·요청 내용 없음. 처리한 날부터 3년(지운 원장 계정의 ID가 남는 것도 법무 확인, L-16). 소속이 지워지거나 학원이 해지돼도 남김(FK 없음). 원장이 읽고 처리하는 진행 중 테이블이라 RLS를 걸고 요청 경로 역할은 SELECT·INSERT·UPDATE(INSERT는 학생·보호자가 앱에서 요청), 지우기는 예약 작업 역할만(개발 총괄 11/22). organization_id가 NULL인 행(소속 없는 계정의 요청·원장 계정 삭제 요청)은 학원 목록 정책이 늘 막으므로 정책을 하나 더 둠: organization_id IS NULL AND requested_by_user_id = current_setting(’app.user_id’, true)::uuid (USING = WITH CHECK, 값이 없으면 막힘). `app.user_id`는 `app.org_ids`와 같이 `set_config(…, true)`로 넣음. 본인이 만들고·보고·취소(PENDING → CANCELED만, 서버 검사)하는 경로이고, NULL 행의 처리(COMPLETED 등)는 운영자 경로(관리 스크립트)만. 이 정책과 ’다른 계정의 NULL 행은 안 보임’ 테스트는 1.0.24a 격리 테스트에 넣음(개발 총괄 11/22)'
+}

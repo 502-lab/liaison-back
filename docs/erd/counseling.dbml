@@ -1,0 +1,84 @@
+// 영역: 원장 도구·상담 — 선생님 메모·인수인계 메모, 상담 기록, 주의 학생 기준·알림
+
+Table teacher_memos {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  student_id uuid [not null, note: '학생 소속. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  author_id uuid [not null, note: '작성한 선생님. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  content varchar(1000) [not null, note: '내용. 1000자(W-T-STU-01). 민감 정보 안내']
+  created_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (organization_id, id) [unique]
+    (organization_id, student_id, created_at)
+  }
+  Note: '선생님 메모(학생 특이사항) · v1.1 · TeacherMemo. 수정 없음. 작성자·원장만 열람. 작성자·원장이 삭제(원장 삭제는 access_logs에 DELETE로 남김)'
+}
+
+Table teacher_memo_shares {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  teacher_memo_id uuid [not null, note: '메모. → `teacher_memos.id` (복합 FK)']
+  handover_id uuid [not null, note: '어느 인수인계에서 골랐는지. → [외부] `handovers.id` 참조 예정(복합 FK). handovers는 다른 영역(인수인계 Handover, 운영자 결정 11/22). ON DELETE는 합칠 때 정하고, 추천은 CASCADE(인수인계가 지워지면 공유도 뜻이 없음, 개발 총괄 11/22)']
+  shared_with_id uuid [not null, note: '새 담당 선생님. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  shared_by uuid [not null, note: '고른 원장. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  created_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (teacher_memo_id, shared_with_id) [unique]
+  }
+  Note: '인수인계로 새 담당에게 보여 주는 메모 · v1.3 · 가칭. 새 담당은 보기만'
+}
+
+Table counseling_notes {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  student_id uuid [not null, note: '학생 소속. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  author_id uuid [not null, note: '작성자. → [외부] `memberships.id` 참조 예정(복합 FK). 원장 또는 선생님']
+  content varchar(2000) [not null, note: '상담 내용. 2000자(W-T-CNS-01·W-D-CNS-01). 민감 정보 안내']
+  plan_subject varchar(20) [note: '계획 과목. 칸 이름 가칭. v1.2에 칸을 두고 v2.0에서 씀. Subject']
+  plan_text varchar(500) [note: '다음 시험까지 계획. 칸 이름 가칭. 500자. v1.2에 칸을 두고 v2.0에서 씀']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (organization_id, student_id, created_at)
+  }
+  Note: '상담 기록(다음 시험까지 계획 칸 포함) · v1.2 · CounselingNote. 작성자·원장만 열람, 작성자만 수정. 계획의 결과(다음 시험 점수·이행률·진도)는 저장하지 않고 계산'
+}
+
+Table at_risk_rules {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  missed_window_days int [default: 14, note: '미제출을 세는 기간(일). 1~90. NULL = 미제출 기준 끔']
+  missed_count_threshold int [default: 3, note: '미제출 횟수 기준(이상). 1~30. 기간 칸과 함께 NULL이거나 함께 값']
+  rate_window_days int [default: 30, note: '이행률을 세는 기간(일). 1~90. NULL = 이행률 기준 끔']
+  rate_threshold_percent int [default: 60, note: '이행률 기준(미만, %). 1~99. 기간 칸과 함께 NULL이거나 함께 값']
+  match_mode varchar(10) [not null, default: 'ANY', note: '두 기준을 합치는 방법. 칸 이름 가칭. 값은 AtRiskRuleMatch (가칭, 용어집 5장). ANY = 하나만 충족해도(처음 값) / ALL = 모두 충족할 때만']
+  updated_by uuid [note: '마지막으로 바꾼 원장. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    organization_id [unique]
+  }
+  Note: '주의 학생 기준(학원마다 하나) · v1.2 · AtRiskRule. 두 기준을 각각 켜고 끄고, 하나 이상 켜야 저장(PM 11/21). CHECK: 칸마다 범위(이름은 ck_at_risk_rules_칸이름), 기간·기준 짝이 함께 NULL이거나 함께 값, 하나 이상 켜짐(ck_at_risk_rules_enabled), 합치는 방법 값(ck_at_risk_rules_match_mode: match_mode IN ANY·ALL, 값 이름이 용어집 PR에서 바뀌면 함께 바꿈). 바꾸면 다음 판정부터 적용(지난 판정은 그대로). 기본값은 원장 인터뷰(1.2.7)로 다듬음'
+}
+
+Table at_risk_alerts {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  student_id uuid [not null, note: '학생 소속. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  detected_date date [not null, note: '주의로 판정된 날']
+  resolved_date date [note: '기준에서 벗어난 날. NULL = 아직 주의. 다시 걸리면 새 행']
+  missed_triggered boolean [not null, note: '미제출 기준에 걸렸는지']
+  rate_triggered boolean [not null, note: '이행률 기준에 걸렸는지']
+  status varchar(20) [not null, default: 'OPEN', note: '처리 상태. OPEN / HANDLED (AlertStatus)']
+  handled_at timestamptz [note: '처리 시각']
+  handled_by uuid [note: '처리한 원장. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (organization_id, status)
+    (student_id, detected_date)
+  }
+  Note: '주의 학생 알림(학생별 주의 구간 하나당 한 행) · v1.2 · AtRiskAlert. 원장만 봄. 부분 유일 (organization_id, student_id) WHERE resolved_date IS NULL → 직전 상태. 알림은 새 구간이 열릴 때만 보내고, 걸린 기준만 바뀌면 missed_triggered·rate_triggered 칸만 고침. 처리(HANDLED)한 뒤에도 계속 걸려 있으면 다시 보내지 않고, 기준을 바꿔도 계속 걸리면 같은 구간. 구간이 닫혀도 행과 처리 상태는 남김(원장이 처리할 때까지 OPEN). CHECK: 걸린 기준이 하나 이상(ck_at_risk_alerts_triggered: missed_triggered OR rate_triggered), 처리 짝(ck_at_risk_alerts_handled_at: status = HANDLED와 handled_at IS NOT NULL이 같음). 하루 판정 결과 자체는 저장하지 않음. 학원이 잠긴 동안 판정 멈춤'
+}
+
+Ref: teacher_memo_shares.(organization_id, teacher_memo_id) > teacher_memos.(organization_id, id) [delete: cascade]

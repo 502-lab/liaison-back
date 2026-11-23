@@ -1,0 +1,5 @@
+// Liaison 설계 ERD(v1~v3). 읽는 법과 고치는 법은 README.md
+Project liaison {
+  database_type: 'PostgreSQL'
+  Note: 'v1~v3 설계 전체. 지금 DB는 Flyway(src/main/resources/db/migration)가 기준. 가칭 이름은 용어집 11장, 확정은 해당 WBS 설계 때'
+}

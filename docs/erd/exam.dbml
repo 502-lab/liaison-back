@@ -1,0 +1,35 @@
+// 영역: 시험 점수 — 시험과 시험 점수
+
+Table exams {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  name varchar(30) [not null, note: '시험명. 30자, 민감 정보 안내']
+  exam_date date [not null, note: '시험일. 시험마다 하나(학원이 정한 대표 날짜). v1.1 새 테이블이라 처음부터 NOT NULL']
+  created_by uuid [not null, note: '만든 원장. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (organization_id, id) [unique]
+    (organization_id, exam_date)
+  }
+  Note: '시험(학원이 정한 시험명·대표 날짜) · v1.1 · 가칭'
+}
+
+Table exam_scores {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  exam_id uuid [not null, note: '시험. → `exams.id` (복합 FK)']
+  student_id uuid [not null, note: '학생 소속. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  subject varchar(20) [not null, note: '과목. Subject']
+  score numeric(5,1) [not null, note: '점수. 0~1000, 소수 첫째 자리까지. 만점 칸은 두지 않음(화면에 없음). CHECK ck_exam_scores_score (score BETWEEN 0 AND 1000)']
+  entered_by uuid [not null, note: '입력한 원장. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (exam_id, student_id, subject) [unique]
+    (organization_id, student_id)
+  }
+  Note: '학생별·과목별 시험 점수 · v1.1 · ExamScore. EXAM_SCORE 동의한 학생만 입력. 철회하면 즉시 삭제. 담당 선생님은 자기 과목 점수만 봄. 과목은 점수 표를 열 때 고르므로 이 표에 둠(PM 11/21)'
+}
+
+Ref: exam_scores.(organization_id, exam_id) > exams.(organization_id, id)

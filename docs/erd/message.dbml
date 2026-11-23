@@ -1,0 +1,94 @@
+// 영역: 메시지 — 대화·메시지·신고·차단·연락 시간
+
+Table message_threads {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  member_id uuid [not null, note: '학생 또는 보호자 소속. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  staff_id uuid [not null, note: '담당 선생님 또는 원장 소속. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  student_id uuid [not null, note: '어느 학생의 대화인지. → [외부] `memberships.id` 참조 예정(복합 FK). 학생 대화면 member_id와 같음, 보호자 대화면 자녀']
+  member_last_read_at timestamptz [note: '학생·보호자가 마지막으로 읽은 시각. 안 읽음 수 계산']
+  staff_last_read_at timestamptz [note: '선생님·원장이 마지막으로 읽은 시각']
+  last_message_at timestamptz [note: '마지막 메시지 시각. 목록 정렬']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (organization_id, id) [unique]
+    (organization_id, member_id, staff_id, student_id) [unique]
+  }
+  Note: '대화(한 학원 안에서 두 사람 사이에 하나, 보호자 대화는 자녀마다 하나) · v3.2 · 가칭. 학생끼리·선생님끼리·원장과 선생님 사이·다른 학원과는 만들지 않음(서버 검사). 과목마다 나누지 않음. 원장이 남의 대화를 열면 access_logs에 남기고 읽음 시각은 바꾸지 않음. 담당이 끝났거나 퇴사한 선생님 대화는 읽기만, 보호자 열람이 꺼진 동안 보호자 쪽에서 숨김(모두 계산). 보호자 연결이 지워지면 GUARDIAN_LINKS 작업이 그 보호자·자녀 대화를 메시지·차단과 함께 지움'
+}
+
+Table messages {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  thread_id uuid [not null, note: '대화. → `message_threads.id` (복합 FK)']
+  sender_id uuid [not null, note: '보낸 사람 소속. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  body varchar(1000) [not null, note: '글. 1000자(W-T-MSG-01·A-S-MSG-02·A-G-MSG-03, PM 11/21). 고치거나 지울 수 없음']
+  outside_contact_hours boolean [not null, note: '연락 시간 밖에 보냈는지. 연락 시간 밖 표시']
+  created_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (organization_id, id) [unique]
+    (organization_id, thread_id, created_at)
+  }
+  Note: '메시지 한 건(글만) · v3.2 · 가칭. 요청 경로 역할은 SELECT·INSERT만(고치기·지우기는 DB 권한으로 막음), 보관 삭제는 작업 역할. 보낸 날부터 1년. 퇴원·탈퇴·보호자 연결 해제는 30일, 학원 해지는 학원 데이터와 같이. 신고가 열려 있는 대화는 처리가 끝날 때까지 남김. 사진은 다음 버전(보호 장치 뒤)이라 칸을 두지 않음. 푸시는 고정 문구. 해지 내보내기에 넣지 않음'
+}
+
+Table message_reports {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  message_id uuid [note: '신고한 메시지(받은 것 하나). → `messages.id` (복합 FK). 메시지가 지워지면 비움(ON DELETE SET NULL (message_id)). 본문은 복사하지 않음']
+  reporter_id uuid [note: '신고한 사람 소속. → [외부] `memberships.id` 참조 예정(복합 FK). 소속이 지워지면 비움. ON DELETE SET NULL (reporter_id)']
+  reported_user_id uuid [note: '신고받은 사람 계정. 값만 저장(FK 없음). 신고할 때 메시지 보낸 사람의 users.id를 넣음. 소속이 지워져도 비우지 않음(약관 제22조 조치가 계정 단위라 학원을 옮겨도 셈). 그 계정을 삭제하면 비움. 비우기는 요청 경로가 아니라 계정 삭제 작업(작업 역할, 학원 가로질러)이 함: 떠난 학원의 신고 행은 RLS에 가려 요청 경로로는 0행만 바뀌기 때문. 바꾼 행 수를 deletion_runs(ACCOUNT_DELETION)에 남기고, 떠난 학원의 신고 행까지 비워지는지 테스트. 다시 가입하는 것을 막는 데 쓰지 않음. 위탁 문서에 운영자 자신의 이용 계약 이행으로 적음(법무 11/21)']
+  category varchar(30) [not null, note: '신고 사유. HARASSMENT(괴롭히거나 욕해요) / CONTACT_OR_MEETING(개인 연락처나 만남을 요구해요, 운영자가 그날 먼저 처리) / OTHER(그 밖에 불편한 내용이에요) (가칭, 값 이름은 3.2.1 설계 때). 셋 중 하나만 고르고 글 칸 없음']
+  route varchar(30) [not null, note: '받는 쪽. DIRECTOR_AND_OPERATOR(일반 신고, 원장과 운영자가 둘 다 받음) / OPERATOR_ONLY(원장에 대한 신고) (가칭, 값 이름은 3.2.1 설계 때)']
+  director_reviewed_at timestamptz [note: '원장 확인 시각. NULL = 확인 필요(W-D-MSG-02 확인함 버튼). 원장 목록 표시용이고 신고를 끝내지 않음. OPERATOR_ONLY면 늘 NULL']
+  director_reviewed_by uuid [note: '확인한 원장. → [외부] `memberships.id` 참조 예정(복합 FK). ON DELETE SET NULL (director_reviewed_by)']
+  operator_status varchar(20) [not null, default: 'OPEN', note: '운영자 처리 상태. OPEN / HANDLED (가칭). HANDLED가 신고가 끝나는 때']
+  operator_result varchar(20) [note: '운영자 처리 결과. NO_ISSUE(문제 없음) / ACTION_TAKEN(조치함) (가칭). 신고한 사람에게는 결과를 알리지 않음']
+  handled_at timestamptz [note: '운영자 처리 시각']
+  handled_by_user_id uuid [note: '처리한 운영자. 값만 저장(FK 없음)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (operator_status, created_at)
+    (organization_id, route, director_reviewed_at)
+    (reported_user_id, operator_result)
+  }
+  Note: '메시지 신고(신고 하나에 한 행) · v3.2 · 가칭. PM 결정(11/21, W-D-MSG-02·A-S-MSG-02·W-T-MSG-01): 신고 하나에 한 행이고 받는 쪽마다 나누지 않음. 처리 상태는 원장 확인과 운영자 처리로 나눔. CHECK: OPERATOR_ONLY면 원장 확인 칸이 NULL(ck_message_reports_director_review), HANDLED와 operator_result·handled_at이 함께 있음(ck_message_reports_operator_result). 운영자가 HANDLED로 바꾸면 신고가 끝남: 신고한 사람 알림함에 처리됐다는 고정 문구(결과 없음, notifications), CONTACT_OR_MEETING 먼저 확인 표시가 일반 순서로 내려감, 신고된 대화의 보관 붙잡기가 풀림(모두 OPEN 신고가 있는지로 계산). 원장 확인은 신고를 끝내지 않음. 원장은 자기 학원의 DIRECTOR_AND_OPERATOR 신고만 보고 확인만 함. 운영 콘솔 목록은 학원을 가로질러 읽으므로 요청 경로 역할이 아니라 운영자 경로로 읽고, 운영자가 본문을 열면 access_logs(actor_type OPERATOR)에 남김. 보관(PM·법무 11/21, B안): 메시지와 함께 지우지 않고 신고한 날(created_at)부터 1년에 LOG_EXPIRY가 지움. 학원이 해지하면 학원 데이터와 같이 파기. 경고 → 정지 → 해지 단계는 operator_result = ACTION_TAKEN인 신고로만 셈(NO_ISSUE로 닫은 신고는 세지 않음). 계정 단위 조치 횟수는 학원을 가로지르므로 운영자 경로에서만 셈'
+}
+
+Table message_blocks {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  thread_id uuid [not null, note: '대화. → `message_threads.id` (복합 FK)']
+  blocked_by uuid [not null, note: '차단한 학생·보호자 소속. → [외부] `memberships.id` 참조 예정(복합 FK). 소속이 지워지면 함께 삭제(ON DELETE CASCADE)']
+  blocked_at timestamptz [not null, note: '차단한 시각. 다시 차단할 때 함께 바꿈(원장 알림·화면의 차단한 때)']
+  unblocked_at timestamptz [note: '차단을 푼 시각. NULL = 차단 중. 보관 1년은 이 시각부터 셈']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (organization_id, thread_id) [unique]
+  }
+  Note: '차단(학생·보호자만) · v3.2 · 가칭. 다시 차단하면 같은 행의 blocked_at을 지금으로 바꾸고 unblocked_at을 비우며, 1년은 다음에 풀 때부터 새로 셈. 보관(PM·법무 11/21): 차단하는 동안 유지하고 차단을 푼 날부터 1년에 LOG_EXPIRY가 지움. 어느 한쪽 소속이나 보호자 연결이 지워지면 함께 삭제: 학생 퇴원·차단한 사람 소속 삭제는 CASCADE, 보호자 연결 해제는 GUARDIAN_LINKS 작업이 그 보호자·자녀 대화를 지울 때 CASCADE, 선생님·원장 퇴사는 소속 행이 남아 CASCADE로 지워지지 않으므로 퇴사 23일째 MEMBERSHIP_DATA 작업이 그 사람이 staff_id인 대화의 차단 행을 지움. 학원이 해지하면 파기. 차단하면 원장에게 알림(원장이 차단되면 운영 콘솔 목록). 차단된 쪽에는 이유 없는 고정 문구만'
+}
+
+Table message_settings {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  contact_start_time time [not null, default: '07:00', note: '연락 시간 시작. 06:00~23:00 안, 한국 시간']
+  contact_end_time time [not null, default: '22:00', note: '연락 시간 끝']
+  outside_hours_mode varchar(20) [not null, default: 'SEND_SILENT', note: '연락 시간 밖 처리. SEND_SILENT(보내지되 알림 없음, 처음 값) / BLOCK(보낼 수 없음) (가칭). 23:00~06:00에는 설정과 관계없이 알림 없음']
+  updated_by uuid [note: '바꾼 원장. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    organization_id [unique]
+  }
+  Note: '학원 연락 시간 설정(학원마다 하나) · v3.2 · 가칭. 끌 수 없음. 행이 없으면 처음 값으로 봄. CHECK: ck_message_settings_contact_hours(시작 ≥ 06:00, 끝 ≤ 23:00, 시작 < 끝), ck_message_settings_outside_hours_mode'
+}
+
+Ref: messages.(organization_id, thread_id) > message_threads.(organization_id, id)
+// DBML은 SET NULL에 칸을 고를 수 없어 아래처럼 적었지만, 실제 DDL은 ON DELETE SET NULL (message_id)입니다(PostgreSQL 15부터).
+// 칸을 고르지 않으면 organization_id까지 비우려다 NOT NULL에 걸려 메시지 삭제가 실패합니다.
+Ref: message_reports.(organization_id, message_id) > messages.(organization_id, id) [delete: set null]
+Ref: message_blocks.(organization_id, thread_id) > message_threads.(organization_id, id) [delete: cascade]

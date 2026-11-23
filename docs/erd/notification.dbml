@@ -1,0 +1,62 @@
+// 영역: 알림 — 알림·알림 항목, 운영자 안내와 받는 사람
+
+Table notifications {
+  id uuid [pk, note: '서버에서 UUID v7']
+  user_id uuid [not null, note: '받는 계정. → [외부] `users.id` 참조 예정(단일 FK)']
+  type varchar(50) [not null, note: '알림 종류. enum NotificationType. 값은 1.0.8 설계 때 확정']
+  channel varchar(10) [not null, note: '채널. DEFAULT / SILENT']
+  notify_at timestamptz [not null, note: '보내는 분. 초 0으로 저장']
+  sent_at timestamptz [note: '보낸 시각']
+  read_at timestamptz [note: '읽은 시각. 앱·웹 읽음 상태를 함께 씀']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (user_id, type, channel, notify_at) [unique]
+    (user_id, created_at)
+  }
+  Note: '알림함 한 건(계정 단위) · v1.0 · Notification. 본문을 저장하지 않음(종류별 고정 문구). 같은 분·종류·채널은 학원이 달라도 1건. CHECK (notify_at = date_trunc(minute, notify_at)). 넣기: 한 분 묶음을 계정별로 모아 알림과 항목을 한 트랜잭션에 넣고, 충돌하면 DO UPDATE … RETURNING id로 기존 id를 받음. 보내기: 그 분이 끝난 뒤 다음 분 작업에서 sent_at IS NULL 조건으로 먼저 표시하고 보냄(최대 1분 지연). notify_at부터 90일 뒤 삭제(최대값, 화면이 더 짧으면 줄임, 법무 11/21). 계정 삭제 때 함께 삭제. 학원 항목을 갖는 종류만 항목이 모두 지워지면 함께 삭제(소속 없는 계정 삭제 30일 전 푸시처럼 원래 항목이 없는 종류는 제외)'
+}
+
+Table notification_items {
+  id uuid [pk, note: '서버에서 UUID v7']
+  organization_id uuid [not null, note: '학원 격리. → [외부] organizations.id']
+  notification_id uuid [not null, note: '알림. → `notifications.id`']
+  membership_id uuid [not null, note: '받는 사람의 그 학원 소속. → [외부] `memberships.id` 참조 예정(복합 FK)']
+  homework_id uuid [note: '숙제. → [외부] `homeworks.id` 참조 예정(복합 FK)']
+  target_type varchar(40) [note: '운영 알림 대상 종류. 가칭. 이름은 볼 때 서버가 권한 확인 뒤 붙임']
+  target_id uuid [note: '운영 알림 대상 ID. 값만 저장(FK 없음)']
+  created_at timestamptz [not null, default: `now()`]
+  Indexes {
+    notification_id
+    (organization_id, membership_id)
+  }
+  Note: '알림의 학원별 항목 · v1.0 · NotificationItem. 소속이 삭제되면 함께 삭제. 소속이 끝나면 바로 숨김(조회 조건)'
+}
+
+Table operator_announcements {
+  id uuid [pk, note: '서버에서 UUID v7']
+  body text [not null, note: '알림함 본문. 푸시는 고정 문구']
+  audience_kind varchar(20) [not null, note: '대상 지정 방식. ALL / ORGANIZATIONS / USERS (가칭)']
+  created_by_user_id uuid [not null, note: '쓴 운영자. 값만 저장(FK 없음)']
+  sent_at timestamptz [note: '보낸 시각']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Note: '운영자 안내(사고 대응) · v1.0 · 가칭. 전역(운영자 전용). 보낸 날부터 3년 보관(법무 11/21). 본문에 특정인 이름을 쓰지 않음'
+}
+
+Table operator_announcement_recipients {
+  id uuid [pk, note: '서버에서 UUID v7']
+  operator_announcement_id uuid [not null, note: '안내. → `operator_announcements.id`']
+  user_id uuid [not null, note: '받는 계정. 값만 저장(FK 없음). 받는 사람이 계정을 지워도 3년 남아야 해서 FK 없음(법무 11/21)']
+  delivered_at timestamptz [note: '발송 시각']
+  read_at timestamptz [note: '읽은 시각']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    (operator_announcement_id, user_id) [unique]
+  }
+  Note: '운영자 안내의 받는 사람별 발송·읽음 · v1.0 · 가칭. 알림함은 notifications와 이 테이블을 합쳐 보여 줌(공지와 따로 두는 것은 개발 확정). RLS가 없으므로 요청 경로는 늘 로그인한 계정 id로만 조회하고, 다른 계정의 안내를 읽지 못한다는 테스트를 둠'
+}
+
+Ref: notification_items.notification_id > notifications.id [delete: cascade]
+Ref: operator_announcement_recipients.operator_announcement_id > operator_announcements.id

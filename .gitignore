@@ -41,3 +41,7 @@ bin/
 
 ### 로컬 작업 트리 ###
 .worktrees/
+
+### ERD 그림 결과물(각자 PC에서 만듦, docs/erd/README.md) ###
+/docs/erd/build/
+dbml-error.log

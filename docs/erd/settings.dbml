@@ -1,0 +1,27 @@
+// 영역: 설정 — 기능 스위치·켠 버전 목록의 지금 값과 변경 기록
+
+Table system_setting_changes {
+  id uuid [pk, note: '서버에서 UUID v7']
+  setting_key varchar(40) [not null, note: '설정 이름. allow_under_14 / allow_guardian / allow_ai_screening / enabled_releases']
+  old_value varchar(200) [note: '바꾸기 전 값']
+  new_value varchar(200) [not null, note: '바꾼 뒤 값']
+  changed_by_user_id uuid [not null, note: '바꾼 운영자. 값만 저장(FK 없음)']
+  created_at timestamptz [not null, default: `now()`]
+  Indexes {
+    (setting_key, created_at)
+  }
+  Note: '기능 스위치·켠 버전 목록 변경 기록 · v1.0 · 가칭. 전역·쌓기만 함. 3년 보관. 지금 값은 system_settings이고, 이 행은 system_settings의 AFTER UPDATE 트리거가 쌓음'
+}
+
+Table system_settings {
+  id uuid [pk, note: '서버에서 UUID v7']
+  setting_key varchar(40) [not null, note: '설정 이름. allow_under_14 / allow_guardian / allow_ai_screening / enabled_releases. CHECK ck_system_settings_setting_key']
+  setting_value varchar(200) [not null, note: '지금 값. 스위치는 true / false(처음 값 false). enabled_releases는 켠 버전을 쉼표로 이음(예: 1.0,1.1, 처음 값은 빈 값). CHECK ck_system_settings_setting_value: 스위치 키는 true·false만, enabled_releases는 정규식 ^([0-9]+[.][0-9]+(,[0-9]+[.][0-9]+)*)?$. 서버는 저장 전에 오름차순·중복 없음·공백 없음으로 맞추고 코드의 버전 목록에 없는 값은 거절']
+  updated_by_user_id uuid [note: '마지막으로 바꾼 운영자. 값만 저장(FK 없음)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, note: '서버가 채움']
+  Indexes {
+    setting_key [unique]
+  }
+  Note: '기능 스위치·켠 버전 목록의 지금 값(1.0.45·1.0.46) · v1.0 · 가칭. 전역 테이블. 요청 경로 역할은 SELECT만, 바꾸는 것은 운영자 관리 경로. 변경 기록은 AFTER UPDATE 트리거가 OLD·NEW를 system_setting_changes에 넣음(바꾼 사람은 NEW.updated_by_user_id, 비어 있으면 거절). SQL로 직접 바꿔도 기록이 빠지지 않음(처리방침 날짜 전에 처리하지 않았다는 근거). 행 4개는 Flyway 시드로 넣음(id는 gen_random_uuid()). 학원 칸이 없는 전역 표라 RLS 누락 검사 대상이 아니고 예외 목록에도 올리지 않음. API·예약 작업 버전 표시 이름은 1.0.46 설계 때'
+}
