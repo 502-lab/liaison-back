@@ -38,15 +38,18 @@ v1~v3에 쓸 DB 표의 설계 전체입니다. 설계하는 동안은 이 폴더
 각자 PC에서 `docs/erd/draw.sh`로 만듭니다. 결과물은 `docs/erd/build/`에 두고 커밋하지 않습니다(`.gitignore`). 그림을 외부에 올리거나 게시하지 않고, Liam의 호스팅·GitHub 앱은 쓰지 않습니다(외부 서비스).
 
 ```bash
-docs/erd/draw.sh design           # 설계 그림(DBML) 전체
-docs/erd/draw.sh design consent   # 영역 하나만: consent.dbml의 표 + 그 표가 가리키는 다른 영역 표
-docs/erd/draw.sh actual           # 실제 그림(Flyway를 적용한 로컬 DB). 먼저 docker compose up --build -d
-python3 -m http.server --directory docs/erd/build/design-consent 8000
+docs/erd/draw.sh design                # 설계 그림(DBML) 전체
+docs/erd/draw.sh design consent        # 영역 하나만: consent.dbml의 표 + 그 표가 가리키는 다른 표
+docs/erd/draw.sh design v1.0           # 버전 하나만: v1.0 표 + 그 표가 가리키는 다른 표(v1이면 v1.x 전부)
+docs/erd/draw.sh design consent --ko   # 그림 위 이름에 한글 이름·버전을 붙임. 영역·버전과 함께 써도 됨
+docs/erd/draw.sh actual                # 실제 그림(Flyway를 적용한 로컬 DB). 먼저 docker compose up --build -d
+python3 -m http.server --directory docs/erd/build/design-consent-ko 8000
 ```
 
 - 필요한 것: Docker, Node.js(`npx`), python3. 파일을 바로 열면 그려지지 않으니 위처럼 띄워서 엽니다.
 - **읽기 쉽게 보기:** 표가 많으면 한 장에 다 넣을 때 글자가 너무 작아집니다. 영역 하나씩 그리고, 주소에 `?showMode=KEY_ONLY`를 붙여 키 칸만 보면 읽기 쉽습니다(예: `http://localhost:8000/?showMode=KEY_ONLY`). 표를 누르면 오른쪽에 칸 설명이 나옵니다.
 - 표 이름 앞의 `public.`은 떼고 그립니다.
+- **한글 이름(`--ko`):** Liam은 note를 오른쪽 패널에만 보여 줍니다. `--ko`를 주면 그림 위 이름을 표는 `[v1.0·가칭] 위탁 문서 동의 · organization_agreements`, 칸은 `문서 종류 · document_kind`처럼 바꿉니다. 표보다 나중 버전에 더하는 칸은 `[v1.3부터] 무효 표시 시각 · invalidated_at`처럼 보입니다. 이름은 note 첫 마디에서 뽑으므로 4장의 note 규칙을 지켜야 제대로 나옵니다.
 - **설계 그림:** DBML 파일을 모두 합쳐 PostgreSQL SQL로 바꾸고(파일마다 따로 바꾸면 다른 파일을 가리키는 `Ref`에서 실패), 포트를 열지 않는 임시 PostgreSQL에 넣은 뒤 그립니다. 설계 SQL이 실제 PostgreSQL에 들어가는지도 이때 확인됩니다. 임시 DB는 끝나면 지워집니다.
 - **실제 그림:** docker compose의 `db`에서 읽습니다. 로컬 DB에는 가짜 데이터만 두고, 스키마만 읽습니다.
 - **왜 tbls를 거치나:** Liam은 DBML을 읽지 못하고, SQL을 바로 읽으면 큰 파일에서 표·칸 설명과 인덱스를 빠뜨립니다. 그래서 DB 카탈로그를 tbls로 JSON으로 뽑아 Liam에 줍니다.
@@ -64,6 +67,11 @@ python3 -m http.server --directory docs/erd/build/design-consent 8000
 
 - **이름:** 용어집의 코드 이름 규칙을 따릅니다(테이블 snake_case 복수, 시각 `*_at`, 사람을 가리키는 외래 키는 `user_id` 또는 역할을 붙인 소속 id). 아직 확정하지 않은 이름은 용어집 11장의 가칭이고, 확정은 해당 WBS 설계 때입니다.
 - **note:** 칸·표가 무엇인지, 버전, 보관 기간, 지켜야 할 제약(CHECK·트리거·RLS)을 짧게 적습니다. 결정 메모에는 날짜와 역할(PM·개발 총괄·법무·운영자)만 적고 사람 이름은 적지 않습니다.
+- **note 첫 마디 규칙(`draw.sh --ko`가 읽음):**
+  - 표 note는 한글 이름으로 시작하고, 이름 뒤에 ` · vX.Y`(처음 들어가는 버전)를 씁니다. 아직 확정하지 않은 이름이면 ` · 가칭`도 씁니다. 예: `위탁 문서 동의(학원 단위) · v1.0 · 가칭. …`
+  - 칸 note도 한글 이름으로 시작하고 `. `으로 끊습니다. 예: `문서 종류. STUDENT_PRIVACY / …`
+  - 표보다 나중 버전에 더하는 칸은 이름 뒤에 버전을 씁니다. 예: `무효 표시 시각. v1.3 · …`. 이런 칸은 빈 값 허용이어야 합니다(AI_RULES 2-7, 더하기만).
+  - `id`·`organization_id`·`created_at`·`updated_at`은 스크립트가 정한 이름(고유 번호·학원·만든 시각·바꾼 시각)을 쓰므로 note 첫 마디를 맞추지 않아도 됩니다.
 - **공개 저장소입니다(AI_RULES 1-3).** 아래는 적지 않습니다.
   - 사람 이름, 노션·내부 문서 링크와 경로
   - DB 역할 비밀번호, 서버 주소·계정, 운영자 접근 경로
