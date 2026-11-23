@@ -38,12 +38,15 @@ v1~v3에 쓸 DB 표의 설계 전체입니다. 설계하는 동안은 이 폴더
 각자 PC에서 `docs/erd/draw.sh`로 만듭니다. 결과물은 `docs/erd/build/`에 두고 커밋하지 않습니다(`.gitignore`). 그림을 외부에 올리거나 게시하지 않고, Liam의 호스팅·GitHub 앱은 쓰지 않습니다(외부 서비스).
 
 ```bash
-docs/erd/draw.sh design   # 설계 그림(DBML)
-docs/erd/draw.sh actual   # 실제 그림(Flyway를 적용한 로컬 DB). 먼저 docker compose up --build -d
-python3 -m http.server --directory docs/erd/build/design 8000   # 브라우저에서 http://localhost:8000
+docs/erd/draw.sh design           # 설계 그림(DBML) 전체
+docs/erd/draw.sh design consent   # 영역 하나만: consent.dbml의 표 + 그 표가 가리키는 다른 영역 표
+docs/erd/draw.sh actual           # 실제 그림(Flyway를 적용한 로컬 DB). 먼저 docker compose up --build -d
+python3 -m http.server --directory docs/erd/build/design-consent 8000
 ```
 
 - 필요한 것: Docker, Node.js(`npx`), python3. 파일을 바로 열면 그려지지 않으니 위처럼 띄워서 엽니다.
+- **읽기 쉽게 보기:** 표가 많으면 한 장에 다 넣을 때 글자가 너무 작아집니다. 영역 하나씩 그리고, 주소에 `?showMode=KEY_ONLY`를 붙여 키 칸만 보면 읽기 쉽습니다(예: `http://localhost:8000/?showMode=KEY_ONLY`). 표를 누르면 오른쪽에 칸 설명이 나옵니다.
+- 표 이름 앞의 `public.`은 떼고 그립니다.
 - **설계 그림:** DBML 파일을 모두 합쳐 PostgreSQL SQL로 바꾸고(파일마다 따로 바꾸면 다른 파일을 가리키는 `Ref`에서 실패), 포트를 열지 않는 임시 PostgreSQL에 넣은 뒤 그립니다. 설계 SQL이 실제 PostgreSQL에 들어가는지도 이때 확인됩니다. 임시 DB는 끝나면 지워집니다.
 - **실제 그림:** docker compose의 `db`에서 읽습니다. 로컬 DB에는 가짜 데이터만 두고, 스키마만 읽습니다.
 - **왜 tbls를 거치나:** Liam은 DBML을 읽지 못하고, SQL을 바로 읽으면 큰 파일에서 표·칸 설명과 인덱스를 빠뜨립니다. 그래서 DB 카탈로그를 tbls로 JSON으로 뽑아 Liam에 줍니다.

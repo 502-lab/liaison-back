@@ -2,6 +2,7 @@
 # ERD 그림을 각자 PC에서 만든다(README 3장). 결과물은 docs/erd/build/에 두고 커밋하지 않는다.
 #   docs/erd/draw.sh design   DBML 설계 그림. 임시 PostgreSQL에 넣어 보므로 설계 SQL이 실제로 들어가는지도 확인된다
 #   docs/erd/draw.sh actual   Flyway를 적용한 로컬 DB(docker compose의 db)의 실제 그림
+#   docs/erd/draw.sh design consent   영역 하나(그 영역 표 + 그 표가 가리키는 다른 영역 표)만. 표가 많으면 이쪽이 읽기 쉽다
 # 필요한 것: Docker, Node.js(npx), python3
 #
 # Liam의 SQL 읽기는 큰 파일에서 표·칸 설명과 인덱스를 빠뜨린다. 그래서 DB 카탈로그를 tbls로 JSON으로 뽑아 Liam에 준다.
@@ -13,13 +14,18 @@ TBLS_IMAGE="ghcr.io/k1low/tbls:v1.96.1@sha256:0d90f07aed0c423a6012d542358c10b13f
 PG_IMAGE="postgres:17-alpine"
 
 mode="${1:-}"
+area="${2:-}"
 if [[ "$mode" != "design" && "$mode" != "actual" ]]; then
-  echo "사용법: docs/erd/draw.sh design | actual" >&2
+  echo "사용법: docs/erd/draw.sh design|actual [영역]   영역은 docs/erd의 파일 이름(예: consent)" >&2
   exit 2
 fi
 
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
+if [[ -n "$area" && ( "$area" == "project" || ! -f "docs/erd/$area.dbml" ) ]]; then
+  echo "영역 파일이 없습니다: docs/erd/$area.dbml" >&2
+  exit 2
+fi
 build="docs/erd/build"
 mkdir -p "$build"
 
@@ -57,6 +63,43 @@ else
   tbls_json "$cid" "postgres://$user:$pw@localhost:5432/$db?sslmode=disable"
 fi
 
-rm -rf "${build:?}/$mode"
-npx -y "$LIAM_CLI" erd build --format tbls --input "$build/$mode.tbls.json" --output-dir "$build/$mode"
-echo "보기: python3 -m http.server --directory $build/$mode 8000 그리고 브라우저에서 http://localhost:8000"
+# 표 이름 앞의 public.을 떼고, 영역을 골랐으면 그 영역 표와 그 표가 가리키는 표만 남긴다.
+out="$mode${area:+-$area}"
+python3 -I - "$build/$mode.tbls.json" "$build/$out.json" "${area:+docs/erd/$area.dbml}" << 'PY'
+import json, re, sys
+
+src, dst, area_file = sys.argv[1], sys.argv[2], sys.argv[3]
+schema = json.load(open(src, encoding="utf-8"))
+
+
+def bare(name):
+    return name[len("public."):] if name.startswith("public.") else name
+
+
+for t in schema["tables"]:
+    t["name"] = bare(t["name"])
+    for item in t.get("constraints", []) + t.get("indexes", []):
+        for key in ("table", "referenced_table"):
+            if key in item:
+                item[key] = bare(item[key])
+for r in schema.get("relations", []):
+    r["table"], r["parent_table"] = bare(r["table"]), bare(r["parent_table"])
+
+if area_file:
+    area = set(re.findall(r"^Table (\w+) \{$", open(area_file, encoding="utf-8").read(), re.M))
+    keep = area | {r["parent_table"] for r in schema.get("relations", []) if r["table"] in area}
+    schema["tables"] = [t for t in schema["tables"] if t["name"] in keep]
+    for t in schema["tables"]:
+        t["constraints"] = [
+            c for c in t.get("constraints", [])
+            if c.get("type") != "FOREIGN KEY" or (t["name"] in area and c.get("referenced_table") in keep)
+        ]
+    schema["relations"] = [r for r in schema.get("relations", []) if r["table"] in area]
+    print(f"영역 표 {len(area & keep)}개 + 가리키는 다른 영역 표 {len(keep - area)}개")
+
+json.dump(schema, open(dst, "w", encoding="utf-8"), ensure_ascii=False)
+PY
+
+rm -rf "${build:?}/$out"
+npx -y "$LIAM_CLI" erd build --format tbls --input "$build/$out.json" --output-dir "$build/$out"
+echo "보기: python3 -m http.server --directory $build/$out 8000 그리고 브라우저에서 http://localhost:8000/?showMode=KEY_ONLY (키 칸만)"
