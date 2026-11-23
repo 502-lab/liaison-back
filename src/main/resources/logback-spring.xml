@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  로그 설정은 이 파일에만 둔다(보안 핵심 경로, CODEOWNERS·저장소 규칙으로 운영자 승인).
+  application*.yml에 logging.* 키를 두지 않는다(LoggingConfigLocationTest가 막음).
+  로그에 개인정보(이름·입력값·토큰·사진 주소·점수·판정 문구)를 남기지 않는다(공통 문서 AI_RULES 1-6).
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <!-- SQL 바인딩 값(학생 이름 등)이 로그에 남지 않도록 늘 끈다. -->
+    <logger name="org.hibernate.orm.jdbc.bind" level="OFF"/>
+
+    <springProfile name="local">
+        <logger name="com.liaison" level="DEBUG"/>
+    </springProfile>
+</configuration>
