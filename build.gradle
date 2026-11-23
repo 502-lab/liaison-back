@@ -3,7 +3,7 @@
 buildscript {
     dependencies {
         constraints {
-            classpath('org.apache.commons:commons-lang3:3.18.0') {
+            classpath('org.apache.commons:commons-lang3:3.22.0') {
                 because '빌드 도구 의존성의 알려진 문제가 고쳐진 버전'
             }
         }
