@@ -17,7 +17,6 @@
 /gradlew.bat             @502-lab/back-owners
 /gradle/wrapper/         @502-lab/back-owners
 /.gitmodules             @502-lab/back-owners
-/.coderabbit.yaml        @502-lab/back-owners
 /.env.example            @502-lab/back-owners
 /.gitleaks.toml          @502-lab/back-owners
 /src/main/resources/application*.yml  @502-lab/back-owners
